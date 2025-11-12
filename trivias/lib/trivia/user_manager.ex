@@ -47,12 +47,12 @@ defmodule Trivia.UserManager do
   def view_raw_file do
     case File.read(@users_file) do
       {:ok, content} ->
-        IO.puts("📄 CONTENIDO CRUDO DE #{@users_file}:")
+        IO.puts(" CONTENIDO CRUDO DE #{@users_file}:")
         IO.puts(content)
         content
 
       {:error, reason} ->
-        IO.puts("❌ Error leyendo archivo: #{reason}")
+        IO.puts(" Error leyendo archivo: #{reason}")
         nil
     end
   end
@@ -188,19 +188,19 @@ defmodule Trivia.UserManager do
 
   # Funciones administrativas
   def handle_call(:show_all_passwords, _from, state) do
-    IO.puts("\n🔓 TODAS LAS CONTRASEÑAS EN TEXTO PLANO:")
-    IO.puts("📁 Archivo: #{@users_file}")
+    IO.puts("\n TODAS LAS CONTRASEÑAS EN TEXTO PLANO:")
+    IO.puts(" Archivo: #{@users_file}")
     IO.puts("=" <> String.duplicate("=", 50))
 
     if map_size(state.users) == 0 do
-      IO.puts("📭 No hay usuarios registrados")
+      IO.puts(" No hay usuarios registrados")
     else
       Enum.each(state.users, fn {username, user_data} ->
-        IO.puts("👤 #{username}")
-        IO.puts("   🔑 #{user_data.password}")
-        IO.puts("   📊 Score: #{user_data.score}")
-        IO.puts("   🎮 Juegos: #{user_data.games_played}")
-        IO.puts("   📚 Tema: #{user_data.favorite_topic || "Ninguno"}")
+        IO.puts(" #{username}")
+        IO.puts("    #{user_data.password}")
+        IO.puts("    Score: #{user_data.score}")
+        IO.puts("    Juegos: #{user_data.games_played}")
+        IO.puts("    Tema: #{user_data.favorite_topic || "Ninguno"}")
         IO.puts("-" <> String.duplicate("-", 40))
       end)
 

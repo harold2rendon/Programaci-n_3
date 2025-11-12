@@ -144,7 +144,7 @@ defmodule Trivia.TCPClientHandler do
     else
       command_parts = parse_command(cleaned_data)
 
-      Logger.info("🔍 Partes del comando: #{inspect(command_parts)}")
+      Logger.info(" Partes del comando: #{inspect(command_parts)}")
 
       case command_parts do
         ["REGISTRAR" | rest] when length(rest) >= 2 ->
@@ -547,7 +547,7 @@ end
     - INICIAR_JUEGO
 
     Juego Multijugador:
-    - CREAR_JUEGO "<tema>" <preguntas> <tiempo>
+    - CREAR_JUEGO <tema> <preguntas> <tiempo>
     - UNIR_JUEGO <id_partida>
     - LISTAR_JUEGOS
 
@@ -572,7 +572,7 @@ end
     - INICIAR_JUEGO
 
      Modo Multijugador:
-    - CREAR_JUEGO "<tema>" <preguntas> <tiempo>
+    - CREAR_JUEGO <tema> <preguntas> <tiempo>
     - UNIR_JUEGO <id_partida>
     - LISTAR_JUEGOS
 

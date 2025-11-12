@@ -193,7 +193,7 @@ defmodule Trivia.CLI do
         # Unir al creador
         case Trivia.Game.join_game(game_pid, user.username) do
           {:ok, _game_state} ->
-            puts("\n🎉 ¡Partida creada exitosamente!")
+            puts("\n ¡Partida creada exitosamente!")
             puts("ID de la partida: #{game_id}")
             puts("Nombre: #{room_name}")
             puts("Jugadores: 1/#{max_players}")
