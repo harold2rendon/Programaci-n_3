@@ -1,0 +1,1 @@
+para correr debes poner en tu terminal la ruta donde guardaste el archivo, posteriormente compilar y entrar a iex, luego pegas lo siguiente " Trivia.CLI.main([]) " (sin las comillas).
