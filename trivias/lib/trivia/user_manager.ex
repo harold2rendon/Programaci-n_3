@@ -2,7 +2,7 @@ defmodule Trivia.UserManager do
   use GenServer
   require Logger
 
-  # Archivo donde se guardan los usuarios - RUTA CORREGIDA
+  # Archivo donde se guardan los usuarios
   @users_file "data/users.dat"
 
   # Client API
@@ -58,11 +58,13 @@ defmodule Trivia.UserManager do
   end
 
   # Server callbacks
+  def terminate(_reason, _state) do
+    :ok
+  end
+
   def init(_state) do
-    # Asegurar que el directorio existe
     File.mkdir_p!("data")
 
-    # Cargar usuarios desde archivo inmediatamente
     users = load_users_from_file()
 
     Logger.info(
@@ -78,19 +80,15 @@ defmodule Trivia.UserManager do
     if Map.has_key?(state.users, username) do
       {:reply, {:error, "El usuario ya existe"}, state}
     else
-      # Crear nuevo usuario
       user_data = %{
-        # ← TEXTO PLANO
         password: password,
         score: 0,
         games_played: 0,
         favorite_topic: nil
       }
 
-      # Guardar en archivo
       save_user_to_file(username, user_data)
 
-      # Actualizar estado en memoria
       new_users = Map.put(state.users, username, user_data)
       new_state = %{state | users: new_users}
 
@@ -107,7 +105,6 @@ defmodule Trivia.UserManager do
         {:reply, {:error, "Usuario no encontrado"}, state}
 
       user_data ->
-        # Verificación en TEXTO PLANO
         if password == user_data.password do
           session_id = generate_session_id()
           user_with_username = Map.put(user_data, :username, username)
@@ -115,7 +112,7 @@ defmodule Trivia.UserManager do
           new_sessions = Map.put(state.sessions, session_id, username)
           new_state = %{state | sessions: new_sessions}
 
-          Logger.info("Login exitoso: #{username}")
+          Logger.info("Acceso exitoso: #{username}")
           {:reply, {:ok, session_id, user_with_username}, new_state}
         else
           {:reply, {:error, "Contraseña incorrecta"}, state}
@@ -147,7 +144,6 @@ defmodule Trivia.UserManager do
       |> Enum.map(fn {username, data} ->
         %{
           username: username,
-          # ← Contraseña en texto
           password_hash: data.password,
           score: data.score,
           games_played: data.games_played,
@@ -175,10 +171,8 @@ defmodule Trivia.UserManager do
             favorite_topic: topic || user_data.favorite_topic
         }
 
-        # Actualizar archivo
         save_user_to_file(username, updated_user)
 
-        # Actualizar estado en memoria
         new_users = Map.put(state.users, username, updated_user)
         new_state = %{state | users: new_users}
 
@@ -231,7 +225,6 @@ defmodule Trivia.UserManager do
     user_line =
       "#{username}|#{user_data.password}|#{user_data.score}|#{user_data.games_played}|#{user_data.favorite_topic || "nil"}\n"
 
-    # Leer archivo actual
     current_content =
       if File.exists?(@users_file) do
         File.read!(@users_file)
@@ -239,7 +232,6 @@ defmodule Trivia.UserManager do
         ""
       end
 
-    # Reemplazar o añadir usuario
     lines = String.split(current_content, "\n") |> Enum.reject(&(&1 == ""))
 
     new_lines =
@@ -247,15 +239,12 @@ defmodule Trivia.UserManager do
              String.starts_with?(line, "#{username}|")
            end) do
         nil ->
-          # Usuario nuevo, añadir al final
           lines ++ [String.trim(user_line)]
 
         index ->
-          # Reemplazar línea existente
           List.replace_at(lines, index, String.trim(user_line))
       end
 
-    # Escribir archivo completo
     File.write!(@users_file, Enum.join(new_lines, "\n") <> "\n")
     Logger.info("Usuario guardado en archivo: #{@users_file}")
   end
@@ -302,9 +291,5 @@ defmodule Trivia.UserManager do
       File.touch!(@users_file)
       %{}
     end
-  end
-
-  def terminate(_reason, _state) do
-    :ok
   end
 end

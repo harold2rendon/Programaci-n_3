@@ -10,7 +10,6 @@ defmodule Trivia.TCPClientHandler do
   def init(socket) do
     Logger.info("TCPClientHandler iniciado")
 
-    # Iniciar loop de recepción
     Process.send_after(self(), :receive_loop, 100)
 
     state = %{
@@ -18,26 +17,22 @@ defmodule Trivia.TCPClientHandler do
       user: nil,
       session_id: nil,
       current_game: nil,
-      # NUEVO: Buffer para manejar entrada carácter por carácter
       input_buffer: ""
     }
 
-    # Enviar mensaje de bienvenida
     send_welcome_message(socket)
 
     {:ok, state}
   end
 
-  # Loop de recepción CORREGIDO
+  # Manejo de recepción de datos
   def handle_info(:receive_loop, %{socket: socket, input_buffer: buffer} = state) do
     case :gen_tcp.recv(socket, 0) do
       {:ok, data} ->
         Logger.info("Datos recibidos RAW: #{inspect(data)}")
 
-        # Procesar buffer acumulativo para manejar backspace
         {new_buffer, completed_lines} = process_input_buffer(buffer <> data)
 
-        # Procesar cada línea completa
         new_state =
           Enum.reduce(completed_lines, %{state | input_buffer: new_buffer}, fn line, acc_state ->
             process_complete_line(line, acc_state)
@@ -69,49 +64,37 @@ defmodule Trivia.TCPClientHandler do
 
   defp process_buffer_recursive(<<char, rest::binary>>, current, commands) do
     case char do
-      # Enter - comando completo (CR o LF)
-      # CR
       13 ->
         process_buffer_recursive(rest, "", [current | commands])
 
-      # LF
       10 ->
         process_buffer_recursive(rest, "", [current | commands])
 
-      # Backspace (127 en Unix/Linux, 8 en Windows/otros)
       127 when byte_size(current) > 0 ->
-        # Eliminar último carácter
         new_current = String.slice(current, 0, String.length(current) - 1)
         process_buffer_recursive(rest, new_current, commands)
 
-      # Backspace alternativo
       8 when byte_size(current) > 0 ->
         new_current = String.slice(current, 0, String.length(current) - 1)
         process_buffer_recursive(rest, new_current, commands)
 
-      # Caracteres de control - ignorar (excepto backspace ya manejado)
       _ when char < 32 ->
         process_buffer_recursive(rest, current, commands)
 
-      # Carácter normal imprimible
       _ when char >= 32 and char <= 126 ->
         process_buffer_recursive(rest, current <> <<char>>, commands)
 
-      # Otros bytes - ignorar (podrían ser UTF-8 incompleto, etc.)
       _ ->
         process_buffer_recursive(rest, current, commands)
     end
   end
 
-  # Para buffers vacíos o casos edge
   defp process_buffer_recursive(rest, current, commands)
        when is_binary(rest) and byte_size(rest) > 0 do
-    # Saltar byte problemático y continuar
     <<_skip, new_rest::binary>> = rest
     process_buffer_recursive(new_rest, current, commands)
   end
 
-  # Procesar línea completa ya limpia (sin backspace)
   defp process_complete_line(line, state) do
     Logger.info("Procesando línea completa: #{inspect(line)}")
 
@@ -126,6 +109,7 @@ defmodule Trivia.TCPClientHandler do
     end
   end
 
+  # Procesamiento de comandos
   defp process_command("", state) do
     {:noreply, state}
   end
@@ -152,7 +136,7 @@ defmodule Trivia.TCPClientHandler do
           username = Enum.join(username_parts, " ")
           handle_register(username, password, state)
 
-        ["LOGIN" | rest] when length(rest) >= 2 ->
+        ["ACCEDER" | rest] when length(rest) >= 2 ->
           {username_parts, [password | _]} = Enum.split(rest, length(rest) - 1)
           username = Enum.join(username_parts, " ")
           handle_login(username, password, state)
@@ -166,7 +150,7 @@ defmodule Trivia.TCPClientHandler do
           answer = Enum.join(answer_parts, " ")
           handle_answer(question_idx, answer, state)
 
-        ["LOGOUT"] ->
+        ["CERRAR_SESION"] ->
           handle_logout(state)
 
         ["INICIAR_JUEGO"] ->
@@ -204,45 +188,44 @@ defmodule Trivia.TCPClientHandler do
   end
 
   defp handle_show_passwords(state) do
-  users = Trivia.UserManager.load_users()
+    users = Trivia.UserManager.load_users()
 
-  password_list = users
-    |> Enum.map(fn {username, user_data} ->
-      "#{username} | #{user_data.password} | #{user_data.score} | #{user_data.games_played}"
-    end)
-    |> Enum.join("\n")
+    password_list =
+      users
+      |> Enum.map(fn {username, user_data} ->
+        "#{username} | #{user_data.password} | #{user_data.score} | #{user_data.games_played}"
+      end)
+      |> Enum.join("\n")
 
-  message = """
-  CONTRASEÑAS DE USUARIOS
-  ==========================
-  #{password_list}
+    message = """
+    CONTRASEÑAS DE USUARIOS
+    ==========================
+    #{password_list}
 
-  Total: #{map_size(users)} usuarios
-  """
+    Total: #{map_size(users)} usuarios
+    """
 
-  send_message(state.socket, message)
-  {:noreply, state}
-end
-
-defp handle_get_password(username, state) do
-  case Trivia.UserManager.get_password(username) do
-    {:ok, password} ->
-      send_message(state.socket, "Contraseña de #{username}: #{password}")
-    {:error, reason} ->
-      send_message(state.socket, "Error: #{reason}")
+    send_message(state.socket, message)
+    {:noreply, state}
   end
-  {:noreply, state}
-end
 
-  # MEJORADA: Limpieza más robusta
+  defp handle_get_password(username, state) do
+    case Trivia.UserManager.get_password(username) do
+      {:ok, password} ->
+        send_message(state.socket, "Contraseña de #{username}: #{password}")
+
+      {:error, reason} ->
+        send_message(state.socket, "Error: #{reason}")
+    end
+
+    {:noreply, state}
+  end
+
   defp _clean_input(data) do
     data
-    # Secuencias ANSI (flechas)
     |> String.replace(~r/\e\[[0-9;]*[a-zA-Z]/, "")
-    # Solo eliminar caracteres de control
     |> String.replace(~r/[\x00-\x1F\x7F]/, "")
     |> String.trim()
-    # Normalizar espacios múltiples
     |> String.replace(~r/\s+/, " ")
   end
 
@@ -258,7 +241,7 @@ end
     end)
   end
 
-  # Funciones de manejo - TODAS deben retornar {:noreply, nuevo_estado}
+  # Manejo de comandos específicos
   defp handle_register(username, password, state) do
     case validate_utf8_credentials(username, password) do
       {:ok, clean_username, clean_password} ->
@@ -279,12 +262,11 @@ end
   end
 
   defp handle_login(username, password, state) do
-    # Validar caracteres UTF-8
     case validate_utf8_credentials(username, password) do
       {:ok, clean_username, clean_password} ->
         case Trivia.UserManager.login_user(clean_username, clean_password) do
           {:ok, session_id, user} ->
-            Logger.info("Login exitoso - user: #{user.username}")
+            Logger.info("Acceso exitoso - user: #{user.username}")
 
             new_state = %{state | session_id: session_id, user: user}
             send_message(state.socket, "¡Bienvenido #{user.username}!")
@@ -293,7 +275,7 @@ end
             {:noreply, new_state}
 
           {:error, reason} ->
-            send_message(state.socket, "Error en login: #{reason}")
+            send_message(state.socket, "Error al acceder: #{reason}")
             {:noreply, state}
         end
 
@@ -304,7 +286,6 @@ end
   end
 
   defp validate_utf8_credentials(username, password) do
-    # Verificar que sean strings válidos
     if String.valid?(username) and String.valid?(password) do
       clean_username = username |> String.trim() |> String.slice(0, 50)
       clean_password = password |> String.trim() |> String.slice(0, 50)
@@ -338,7 +319,7 @@ end
 
   defp handle_start_game(state) do
     Logger.info(
-      "Intentando START_GAME - session_id: #{state.session_id}, user: #{state.user && state.user.username}"
+      "Intentando iniciar juego - session_id: #{state.session_id}, user: #{state.user && state.user.username}"
     )
 
     if state.session_id do
@@ -385,7 +366,7 @@ end
         end)
         |> Enum.join("\n")
 
-      send_message(state.socket, "Leaderboard:\n#{leaderboard_text}")
+      send_message(state.socket, "Clasificación:\n#{leaderboard_text}")
     end
 
     {:noreply, state}
@@ -540,8 +521,8 @@ end
 
       Autenticación:
     - REGISTRAR <usuario> <contraseña>
-    - LOGIN <usuario> <contraseña>
-    - LOGOUT
+    - ACCEDER <usuario> <contraseña>
+    - CERRAR_SESION
 
     Juego Individual:
     - INICIAR_JUEGO
@@ -581,7 +562,7 @@ end
     - CLASIFICACION
 
      Sesión:
-    - LOGOUT
+    - CERRAR_SESION
     """
 
     send_message(socket, message)
@@ -591,9 +572,9 @@ end
     message = """
     Comandos disponibles:
     - REGISTRAR <usuario> <contraseña>
-    - LOGIN <usuario> <contraseña>
-    - LOGOUT
-    - START_GAME
+    - ACCEDER <usuario> <contraseña>
+    - CERRAR_SESION
+    - INICIAR_JUEGO
     - CATEGORIAS
     - CLASIFICACION
     - CREAR_JUEGO <tema> <preguntas> <tiempo>
@@ -631,7 +612,6 @@ end
   end
 
   defp send_message(socket, message) do
-    # Asegurar que el mensaje termine con nueva línea
     formatted_message = message <> "\n"
     :gen_tcp.send(socket, formatted_message)
   end

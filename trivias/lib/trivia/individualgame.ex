@@ -7,11 +7,12 @@ defmodule Trivia.IndividualGame do
     GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
   end
 
+  # Función para iniciar un juego estándar
   def start_game(session_id) do
     GenServer.call(__MODULE__, {:start_game, session_id})
   end
 
-  # Función unificada para configuración personalizada
+  # Función para iniciar un juego con configuración personalizada
   def start_game_with_settings(session_id, category, num_questions, time_limit) do
     GenServer.call(
       __MODULE__,
@@ -19,10 +20,17 @@ defmodule Trivia.IndividualGame do
     )
   end
 
+  # Callback de terminación
+  def terminate(_reason, _state) do
+    :ok
+  end
+
+  # Función para responder una pregunta
   def answer_question(session_id, answer, time_taken) do
     GenServer.call(__MODULE__, {:answer_question, session_id, answer, time_taken})
   end
 
+  # Función para obtener el estado actual del juego
   def get_game_state(session_id) do
     GenServer.call(__MODULE__, {:get_game_state, session_id})
   end
@@ -32,11 +40,11 @@ defmodule Trivia.IndividualGame do
     {:ok, state}
   end
 
+  # Manejo de llamadas
   def handle_call({:start_game, session_id}, _from, state) do
     # Tu implementación existente
     case Map.get(state, session_id) do
       nil ->
-        # Iniciar nuevo juego
         game_state = %{
           session_id: session_id,
           score: 0,
@@ -48,7 +56,6 @@ defmodule Trivia.IndividualGame do
           status: :playing
         }
 
-        # Obtener primera pregunta
         categories = Trivia.QuestionBank.get_categories()
         random_category = Enum.random(categories)
         questions = Trivia.QuestionBank.get_questions_by_category(random_category)
@@ -82,7 +89,6 @@ defmodule Trivia.IndividualGame do
       ) do
     case Map.get(state, session_id) do
       nil ->
-        # Iniciar nuevo juego con configuración personalizada
         game_state = %{
           session_id: session_id,
           score: 0,
@@ -94,12 +100,10 @@ defmodule Trivia.IndividualGame do
           status: :playing
         }
 
-        # Obtener preguntas de la categoría especificada
         questions =
           if category do
             Trivia.QuestionBank.get_questions_by_category(category)
           else
-            # Si no hay categoría, usar todas
             Trivia.QuestionBank.get_categories()
             |> Enum.flat_map(&Trivia.QuestionBank.get_questions_by_category/1)
           end
@@ -107,7 +111,6 @@ defmodule Trivia.IndividualGame do
         if Enum.empty?(questions) do
           {:reply, {:error, "No hay preguntas disponibles"}, state}
         else
-          # Tomar el número solicitado de preguntas
           selected_questions = Enum.take(Enum.shuffle(questions), max_questions)
           first_question = List.first(selected_questions)
 
@@ -137,27 +140,22 @@ defmodule Trivia.IndividualGame do
         question = game_state.current_question
         is_correct = String.upcase(answer) == String.upcase(question.correct_answer)
 
-        # Calcular puntuación
         points = if is_correct, do: 10, else: 0
         new_score = game_state.score + points
 
-        # Actualizar estado del juego
         updated_game_state = %{
           game_state
           | score: new_score,
             questions_answered: game_state.questions_answered + 1
         }
 
-        # Verificar si el juego ha terminado
         if updated_game_state.questions_answered >= updated_game_state.max_questions do
-          # Juego terminado - actualizar usuario y limpiar juego
           final_state = %{updated_game_state | status: :finished}
           update_user_stats(session_id, final_state.score)
 
           updated_state = Map.delete(state, session_id)
           {:reply, {:ok, :game_over, final_state}, updated_state}
         else
-          # Obtener siguiente pregunta
           categories = Trivia.QuestionBank.get_categories()
           random_category = Enum.random(categories)
           questions = Trivia.QuestionBank.get_questions_by_category(random_category)
@@ -186,11 +184,13 @@ defmodule Trivia.IndividualGame do
   end
 
   # Funciones privadas
+
+  # Cálculo de puntos basado en la respuesta y el tiempo tomado
   defp calculate_points(is_correct, _time_taken, _time_limit) do
-    # Lógica simple de puntuación por ahora
     if is_correct, do: 10, else: 0
   end
 
+  # Actualización de estadísticas del usuario al finalizar el juego
   defp update_user_stats(session_id, score) do
     case Trivia.UserManager.get_user_by_session(session_id) do
       {:ok, user} ->
@@ -199,10 +199,5 @@ defmodule Trivia.IndividualGame do
       _ ->
         :ok
     end
-  end
-
-  # Callback de terminación
-  def terminate(_reason, _state) do
-    :ok
   end
 end

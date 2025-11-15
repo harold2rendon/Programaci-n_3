@@ -7,10 +7,11 @@ defmodule Trivia.CLI do
     show_main_menu()
   end
 
+  # menú principal de la aplicación
   defp show_main_menu do
     puts("\n1. Registrarse")
     puts("2. Iniciar sesión")
-    puts("3. Ver leaderboard")
+    puts("3. Ver Clasificación general")
     puts("4. Ver categorías disponibles")
     puts("5. Salir")
 
@@ -36,8 +37,9 @@ defmodule Trivia.CLI do
     end
   end
 
+  # menú principal del juego
   defp show_game_menu(session_id, user) do
-    puts("\n=== Menú del Juego ===")
+    puts("\n=== Menú ===")
     puts("1. Jugar trivia rápida (5 preguntas, 30 segundos)")
     puts("2. Jugar trivia estándar (10 preguntas, sin límite de tiempo)")
     puts("3. Jugar trivia personalizada")
@@ -80,6 +82,7 @@ defmodule Trivia.CLI do
     end
   end
 
+  # funciones de modo multijugador
   defp show_multiplayer_menu(session_id, user) do
     puts("\n=== Modo Multijugador ===")
     puts("1. Crear una partida")
@@ -106,14 +109,15 @@ defmodule Trivia.CLI do
     end
   end
 
+  # función para la configuración de partidas multijugador
   defp create_multiplayer_room(session_id, user) do
     puts("\n=== Crear Partida Multijugador ===")
 
     room_name = gets("Nombre de la partida: ") |> trim()
 
     max_players =
-      case gets("Número máximo de jugadores (2-8): ") |> trim() |> Integer.parse() do
-        {num, ""} when num in 2..8 ->
+      case gets("Número máximo de jugadores (2-4): ") |> trim() |> Integer.parse() do
+        {num, ""} when num in 2..4 ->
           num
 
         _ ->
@@ -121,7 +125,6 @@ defmodule Trivia.CLI do
           4
       end
 
-    # Seleccionar categoría - con manejo de errores
     categories =
       try do
         Trivia.QuestionBank.get_categories()
@@ -160,37 +163,8 @@ defmodule Trivia.CLI do
           10
       end
 
-    # Usar el nuevo sistema de partidas
     case Trivia.GameSupervisor.create_game(category || "general", num_questions, 15, max_players) do
       {:ok, game_pid, game_id} ->
-        # Unir al creador
-        case Trivia.Game.join_game(game_pid, user.username) do
-          {:ok, _game_state} ->
-            puts("\n¡Partida creada exitosamente!")
-            puts("ID de la partida: #{game_id}")
-            puts("Nombre: #{room_name}")
-            puts("Jugadores: 1/#{max_players}")
-            puts("Categoría: #{category || "Todas"}")
-            puts("Preguntas: #{num_questions}")
-            puts("\nComparte este ID con otros jugadores: #{game_id}")
-            puts("\nEsperando jugadores...")
-
-            wait_for_players(session_id, user, game_pid, game_id)
-
-          {:error, reason} ->
-            puts("Error al unirse a la partida: #{reason}")
-            show_multiplayer_menu(session_id, user)
-        end
-
-      {:error, reason} ->
-        puts("Error al crear partida: #{reason}")
-        show_multiplayer_menu(session_id, user)
-    end
-
-    # Usar el nuevo sistema de partidas
-    case Trivia.GameSupervisor.create_game(category || "general", num_questions, 15, max_players) do
-      {:ok, game_pid, game_id} ->
-        # Unir al creador
         case Trivia.Game.join_game(game_pid, user.username) do
           {:ok, _game_state} ->
             puts("\n ¡Partida creada exitosamente!")
@@ -215,6 +189,7 @@ defmodule Trivia.CLI do
     end
   end
 
+  # función para esperar a que los jugadores se unan y comenzar la partida
   defp wait_for_players(session_id, user, game_pid, game_id) do
     case Trivia.Game.get_game_state(game_pid) do
       {:ok, game_state} ->
@@ -241,7 +216,6 @@ defmodule Trivia.CLI do
             end
 
           "3" ->
-            # El proceso se cerrará automáticamente cuando termine
             puts("Partida cancelada")
             show_multiplayer_menu(session_id, user)
 
@@ -256,6 +230,7 @@ defmodule Trivia.CLI do
     end
   end
 
+  # función para mostrar el estado de la sala
   defp show_room_status(game_state) do
     puts("\n=== Estado de la Partida ===")
     puts("ID: #{game_state.id}")
@@ -269,6 +244,7 @@ defmodule Trivia.CLI do
     end)
   end
 
+  # función para unirse a una sala multijugador existente
   defp join_multiplayer_room(session_id, user) do
     puts("\n=== Unirse a Partida ===")
 
@@ -301,6 +277,7 @@ defmodule Trivia.CLI do
     end
   end
 
+  # función para esperar a que el creador inicie la partida
   defp wait_for_game_start(session_id, user, game_pid, game_id) do
     puts("\nEsperando a que el creador inicie la partida...")
     puts("1. Actualizar estado")
@@ -324,7 +301,6 @@ defmodule Trivia.CLI do
         end
 
       "2" ->
-        # En este sistema simple, simplemente salimos del menú
         puts("Has abandonado la partida")
         show_multiplayer_menu(session_id, user)
 
@@ -334,6 +310,7 @@ defmodule Trivia.CLI do
     end
   end
 
+  # función para listar las salas multijugador disponibles
   defp list_available_rooms(_session_id, user) do
     games = Trivia.GameSupervisor.list_games()
 
@@ -356,6 +333,7 @@ defmodule Trivia.CLI do
     show_multiplayer_menu(nil, user)
   end
 
+  # función para iniciar la partida multijugador
   defp start_multiplayer_game(session_id, user, game_pid) do
     case Trivia.Game.get_game_state(game_pid) do
       {:ok, game_state} ->
@@ -372,9 +350,9 @@ defmodule Trivia.CLI do
     end
   end
 
+  # función para el bucle principal del juego multijugador
   defp play_multiplayer_loop(session_id, user, game_pid, game_state) do
     if game_state.current_question do
-      # Mostrar pregunta actual
       question = game_state.current_question
 
       puts("\n" <> String.duplicate("=", 50))
@@ -392,15 +370,14 @@ defmodule Trivia.CLI do
       puts("\nTienes #{game_state.time_limit} segundos para responder")
       puts("Usa: answer #{game_state.current_question_index} <número_respuesta>")
 
-      # Esperar respuesta del usuario
       wait_for_answer(session_id, user, game_pid, game_state)
     else
-      # Juego terminado, mostrar resultados
       show_multiplayer_results(game_state)
       show_game_menu(session_id, user)
     end
   end
 
+  # función para esperar y procesar la respuesta del jugador
   defp wait_for_answer(session_id, user, game_pid, game_state) do
     input = gets("\nTu comando: ") |> trim()
 
@@ -408,7 +385,6 @@ defmodule Trivia.CLI do
       ["answer", _question_idx, answer_letter] ->
         case Integer.parse(answer_letter) do
           {answer_num, ""} when answer_num in 1..4 ->
-            # Convertir número a letra (1=A, 2=B, etc.)
             answer = ["A", "B", "C", "D"] |> Enum.at(answer_num - 1)
 
             case Trivia.Game.answer_question(
@@ -426,7 +402,6 @@ defmodule Trivia.CLI do
 
                 puts("Tu puntuación actual: #{result.score}")
 
-                # Esperar siguiente pregunta
                 Process.sleep(2000)
 
                 case Trivia.Game.get_game_state(game_pid) do
@@ -450,6 +425,7 @@ defmodule Trivia.CLI do
     end
   end
 
+  # función para mostrar los resultados finales de la partida multijugador
   defp show_multiplayer_results(game_state) do
     ranking =
       game_state.players
@@ -473,6 +449,7 @@ defmodule Trivia.CLI do
     end)
   end
 
+  # función para encontrar una partida por su ID
   defp find_game_by_id(game_id) do
     Trivia.GameSupervisor.list_games()
     |> Enum.find(fn game -> game.id == game_id end)
@@ -481,7 +458,6 @@ defmodule Trivia.CLI do
         :not_found
 
       _game ->
-        # Buscar el PID del proceso del juego
         DynamicSupervisor.which_children(Trivia.GameSupervisor)
         |> Enum.find(fn {_, pid, _, _} ->
           case Trivia.Game.get_game_state(pid) do
@@ -496,19 +472,23 @@ defmodule Trivia.CLI do
     end
   end
 
-  # ... (mantener las funciones individuales del juego existentes)
+  # funciones para iniciar diferentes tipos de juegos individuales
+
+  # función para iniciar un juego rápido
   defp start_quick_game(session_id, user) do
     puts("\nIniciando Trivia Rápida")
     puts("5 preguntas |  30 segundos por pregunta")
     start_game_with_settings(session_id, user, nil, 5, 30)
   end
 
+  # función para iniciar un juego estándar
   defp start_standard_game(session_id, user) do
     puts("\nIniciando Trivia Estándar")
     puts("10 preguntas |  Sin límite de tiempo")
     start_game_with_settings(session_id, user, nil, 10, 0)
   end
 
+  # función para iniciar un juego personalizado
   defp start_custom_game(session_id, user) do
     puts("\nConfiguración Personalizada")
 
@@ -543,6 +523,7 @@ defmodule Trivia.CLI do
     start_game_with_settings(session_id, user, nil, num_questions, time_limit)
   end
 
+  # función para iniciar un juego por categoría específica
   defp start_game_by_category(session_id, user) do
     categories = Trivia.QuestionBank.get_categories()
 
@@ -582,6 +563,7 @@ defmodule Trivia.CLI do
     end
   end
 
+  # función para iniciar el juego con las configuraciones dadas
   defp start_game_with_settings(session_id, user, category, num_questions, time_limit) do
     case Trivia.IndividualGame.start_game_with_settings(
            session_id,
@@ -598,6 +580,7 @@ defmodule Trivia.CLI do
     end
   end
 
+  # función para el bucle principal del juego individual
   defp play_game_loop(session_id, game_state, category) do
     question = game_state.current_question
 
@@ -625,7 +608,6 @@ defmodule Trivia.CLI do
         selected_answer = Enum.at(question.all_answers, answer_index - 1)
         time_taken = System.system_time(:second) - start_time
 
-        # Verificar si se excedió el tiempo
         final_time_taken =
           if game_state.time_limit > 0 and time_taken > game_state.time_limit do
             puts("\n¡Tiempo agotado! La respuesta correcta era: #{question.correct_answer}")
@@ -664,6 +646,7 @@ defmodule Trivia.CLI do
     end
   end
 
+  # función para leer la respuesta del usuario con un límite de tiempo
   defp read_answer_with_timeout(max_options, time_limit) do
     if time_limit > 0 do
       task =
@@ -681,6 +664,7 @@ defmodule Trivia.CLI do
     end
   end
 
+  # función para parsear la entrada de la respuesta del usuario
   defp parse_answer_input(input, max_options) do
     case Integer.parse(input) do
       {answer_index, ""} when answer_index >= 1 and answer_index <= max_options ->
@@ -691,6 +675,7 @@ defmodule Trivia.CLI do
     end
   end
 
+  # función para procesar la respuesta del usuario
   defp process_answer(
          session_id,
          game_state,
@@ -720,6 +705,7 @@ defmodule Trivia.CLI do
     end
   end
 
+  # función para finalizar el juego y mostrar los resultados
   defp end_game(session_id, final_state, category) do
     puts("\n=== JUEGO TERMINADO ===")
     puts("Puntuación final: #{final_state.score}")
@@ -732,6 +718,7 @@ defmodule Trivia.CLI do
     end
   end
 
+  # función para mostrar la puntuación del usuario
   defp show_my_score(user, session_id) do
     case Trivia.UserManager.get_user_by_session(session_id) do
       {:ok, current_user} ->
@@ -749,10 +736,11 @@ defmodule Trivia.CLI do
     show_game_menu(session_id, user)
   end
 
+  # función para mostrar el clasificación general
   defp show_leaderboard do
     leaderboard = Trivia.UserManager.get_leaderboard()
 
-    puts("\n=== Leaderboard ===")
+    puts("\n=== Clasificación ===")
 
     if Enum.empty?(leaderboard) do
       puts("Aún no hay puntuaciones registradas")
@@ -766,6 +754,7 @@ defmodule Trivia.CLI do
     show_main_menu()
   end
 
+  # función para mostrar las categorías disponibles
   defp show_categories do
     categories = Trivia.QuestionBank.get_categories()
 
@@ -780,6 +769,7 @@ defmodule Trivia.CLI do
     show_main_menu()
   end
 
+  # función para registrar un nuevo usuario
   defp register_user do
     username = gets("Usuario: ") |> trim()
     password = gets("Contraseña: ") |> trim()
@@ -795,6 +785,7 @@ defmodule Trivia.CLI do
     end
   end
 
+  # función para iniciar sesión de un usuario existente
   defp login_user do
     username = gets("Usuario: ") |> trim()
     password = gets("Contraseña: ") |> trim()

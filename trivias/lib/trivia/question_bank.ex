@@ -9,7 +9,7 @@ defmodule Trivia.QuestionBank do
 
   def init(_state) do
     questions = load_questions()
-    Logger.info("QuestionBank loaded with #{length(questions)} questions")
+    Logger.info("Banco de preguntascargado con #{length(questions)} preguntas")
     {:ok, %{questions: questions}}
   end
 
@@ -35,7 +35,7 @@ defmodule Trivia.QuestionBank do
     questions = state.questions
 
     if Enum.empty?(questions) do
-      {:reply, {:error, "No questions available"}, state}
+      {:reply, {:error, "No hay preguntas disponibles"}, state}
     else
       question = Enum.random(questions)
       {:reply, {:ok, question}, state}
@@ -46,7 +46,7 @@ defmodule Trivia.QuestionBank do
     questions = Enum.filter(state.questions, fn q -> q.category == category end)
 
     if Enum.empty?(questions) do
-      {:reply, {:error, "No questions available for category #{category}"}, state}
+      {:reply, {:error, "No hay preguntas disponibles para la categoría #{category}"}, state}
     else
       question = Enum.random(questions)
       {:reply, {:ok, question}, state}
@@ -77,6 +77,8 @@ defmodule Trivia.QuestionBank do
   end
 
   # Funciones privadas
+
+  # Función para cargar preguntas desde el archivo
   defp load_questions do
     file_path = "data/questions.dat"
 
@@ -85,11 +87,15 @@ defmodule Trivia.QuestionBank do
         parse_questions(content)
 
       {:error, _reason} ->
-        Logger.warning("Could not load questions file, using default questions")
+        Logger.warning(
+          "No se pudo cargar el archivo de preguntas, usando preguntas predeterminadas"
+        )
+
         default_questions()
     end
   end
 
+  # Función para analizar el contenido del archivo de preguntas
   defp parse_questions(content) do
     content
     |> String.split("\n")
@@ -117,6 +123,7 @@ defmodule Trivia.QuestionBank do
     |> Enum.filter(& &1)
   end
 
+  # Preguntas predeterminadas en caso de fallo al cargar el archivo
   defp default_questions do
     [
       %{

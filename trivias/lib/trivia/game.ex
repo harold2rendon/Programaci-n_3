@@ -17,7 +17,6 @@ defmodule Trivia.Game do
     :max_players,
     :total_questions,
     :time_limit,
-    # :waiting, :playing, :finished
     :status,
     :current_question,
     :current_question_index,
@@ -28,11 +27,12 @@ defmodule Trivia.Game do
     :timer_ref
   ]
 
-  # API pública - Multijugador
+  # API pública
   def start_link(game_params) do
     GenServer.start_link(__MODULE__, game_params)
   end
 
+  # Crear una nueva partida
   def create_game(
         topic,
         total_questions,
@@ -42,22 +42,27 @@ defmodule Trivia.Game do
     Trivia.GameSupervisor.create_game(topic, total_questions, time_limit, max_players)
   end
 
+  # Unirse a una partida
   def join_game(game_pid, username) do
     GenServer.call(game_pid, {:join, username})
   end
 
+  # Iniciar una partida
   def start_game(game_pid, username) do
     GenServer.call(game_pid, {:start, username})
   end
 
+  # Responder a una pregunta
   def answer_question(game_pid, username, question_index, answer) do
     GenServer.call(game_pid, {:answer, username, question_index, answer})
   end
 
+  # Obtener el estado de la partida
   def get_game_state(game_pid) do
     GenServer.call(game_pid, :get_state)
   end
 
+  # Listar jugadores en la partida
   def list_players(game_pid) do
     GenServer.call(game_pid, :list_players)
   end
@@ -100,7 +105,6 @@ defmodule Trivia.Game do
         {:reply, {:error, "Ya estás en esta partida"}, state}
 
       true ->
-        # Primer jugador se convierte en creador
         creator = if map_size(state.players) == 0, do: username, else: state.creator
 
         new_player = %{
@@ -133,13 +137,11 @@ defmodule Trivia.Game do
         {:reply, {:error, "Se necesitan al menos 2 jugadores"}, state}
 
       true ->
-        # Cargar preguntas del tema seleccionado
         questions = Trivia.QuestionBank.get_questions_by_category(state.topic)
 
         if Enum.empty?(questions) do
           {:reply, {:error, "No hay preguntas disponibles para el tema #{state.topic}"}, state}
         else
-          # Tomar el número solicitado de preguntas
           selected_questions = Enum.take(questions, state.total_questions)
 
           if length(selected_questions) < state.total_questions do
@@ -148,7 +150,6 @@ defmodule Trivia.Game do
             )
           end
 
-          # Iniciar primera pregunta
           first_question = Enum.at(selected_questions, 0)
 
           new_state = %{
@@ -161,11 +162,9 @@ defmodule Trivia.Game do
               answers_received: %{}
           }
 
-          # Programar timeout para la pregunta
           timer_ref = Process.send_after(self(), :question_timeout, state.time_limit * 1000)
           new_state = %{new_state | timer_ref: timer_ref}
 
-          # Broadcast primera pregunta
           broadcast_question(new_state)
 
           Logger.info("Partida #{state.id} iniciada por #{username}")
@@ -189,18 +188,15 @@ defmodule Trivia.Game do
         {:reply, {:error, "Ya respondiste esta pregunta"}, state}
 
       true ->
-        # Procesar respuesta
         is_correct = String.upcase(answer) == String.upcase(state.current_correct_answer)
         score_change = if is_correct, do: 10, else: -5
 
-        # Actualizar puntuación
         current_score = Map.get(state.scores, username, 0)
         new_score = current_score + score_change
 
         updated_scores = Map.put(state.scores, username, new_score)
         updated_answers = Map.put(state.answers_received, username, {answer, is_correct})
 
-        # Actualizar jugador
         updated_player = Map.get(state.players, username) |> Map.put(:score, new_score)
         updated_players = Map.put(state.players, username, updated_player)
 
@@ -211,7 +207,6 @@ defmodule Trivia.Game do
             players: updated_players
         }
 
-        # Notificar respuesta
         message =
           if is_correct do
             "#{username} respondió correctamente: +10 puntos"
@@ -221,7 +216,6 @@ defmodule Trivia.Game do
 
         broadcast_to_players(new_state, message)
 
-        # Verificar si todos respondieron
         if map_size(new_state.answers_received) == map_size(new_state.players) do
           Process.cancel_timer(new_state.timer_ref)
           Process.send_after(self(), :next_question, 2000)
@@ -245,21 +239,17 @@ defmodule Trivia.Game do
     {:reply, {:ok, player_list}, state}
   end
 
-  # Manejo de mensajes asíncronos
   def handle_info(:question_timeout, state) do
     if state.status == :playing do
-      # Tiempo agotado para la pregunta actual
       broadcast_to_players(
         state,
         "Tiempo agotado! Respuesta correcta: #{state.current_correct_answer}"
       )
 
-      # Aplicar penalización a quienes no respondieron
       updated_players = penalize_non_responders(state.players, state.answers_received)
 
       new_state = %{state | players: updated_players}
 
-      # Pasar a siguiente pregunta después de un delay
       Process.send_after(self(), :next_question, 3000)
       {:noreply, new_state}
     else
@@ -272,7 +262,6 @@ defmodule Trivia.Game do
       # Fin del juego
       end_game(state)
     else
-      # Cargar siguiente pregunta
       questions = Trivia.QuestionBank.get_questions_by_category(state.topic)
 
       if length(questions) >= state.current_question_index do
@@ -287,22 +276,31 @@ defmodule Trivia.Game do
             start_time: System.system_time(:second)
         }
 
-        # Programar nuevo timeout
         timer_ref = Process.send_after(self(), :question_timeout, state.time_limit * 1000)
         new_state = %{new_state | timer_ref: timer_ref}
 
-        # Broadcast nueva pregunta
         broadcast_question(new_state)
 
         {:noreply, new_state}
       else
-        # No hay más preguntas, terminar juego
         end_game(state)
       end
     end
   end
 
+  def handle_info(:shutdown, state) do
+    Logger.info("Cerrando partida #{state.id}")
+    {:stop, :normal, state}
+  end
+
+  def terminate(reason, state) do
+    Logger.info("Partida #{state.id} terminada: #{inspect(reason)}")
+    :ok
+  end
+
   # Funciones privadas
+
+  # Generar un ID único para la partida
   defp generate_game_id do
     :crypto.strong_rand_bytes(8)
     |> Base.encode64()
@@ -310,17 +308,17 @@ defmodule Trivia.Game do
     |> String.slice(0, 8)
   end
 
+  # Enviar mensaje a todos los jugadores
   defp broadcast_to_players(state, message) do
-    # En un sistema real, aquí enviarías el mensaje a todos los clientes conectados
     IO.puts("\n=== MENSAJE DE PARTIDA #{state.id} ===")
     IO.puts(message)
     IO.puts("=================================\n")
   end
 
+  # Enviar la pregunta actual a todos los jugadores
   defp broadcast_question(state) do
     question = state.current_question
 
-    # Construir el texto de la pregunta correctamente
     question_header = """
 
     PREGUNTA #{state.current_question_index}/#{state.total_questions}
@@ -341,10 +339,10 @@ defmodule Trivia.Game do
     broadcast_to_players(state, full_question_text)
   end
 
+  # Penalizar a los jugadores que no respondieron
   defp penalize_non_responders(players, answers_received) do
     Map.new(players, fn {username, player} ->
       if not Map.has_key?(answers_received, username) do
-        # Penalizar por no responder
         new_score = player.score - 2
         IO.puts("#{username} no respondió: -2 puntos")
         {username, %{player | score: new_score}}
@@ -354,14 +352,13 @@ defmodule Trivia.Game do
     end)
   end
 
+  # Terminar la partida y mostrar resultados
   defp end_game(state) do
-    # Calcular ranking final
     ranking =
       state.players
       |> Map.values()
       |> Enum.sort_by(& &1.score, :desc)
 
-    # Mostrar resultados finales
     results_header = """
 
     PARTIDA TERMINADA - #{state.topic}
@@ -388,18 +385,16 @@ defmodule Trivia.Game do
     full_results_text = results_header <> ranking_text <> winner_text
     broadcast_to_players(state, full_results_text)
 
-    # Guardar resultados
     save_game_results(state, ranking)
 
-    # Actualizar puntajes globales
     update_global_scores(ranking, state.topic)
 
-    # Terminar proceso del juego
     Process.send_after(self(), :shutdown, 5000)
 
     {:noreply, %{state | status: :finished}}
   end
 
+  # Guardar resultados de la partida en un archivo
   defp save_game_results(state, ranking) do
     results = """
     Fecha: #{DateTime.utc_now()}
@@ -415,19 +410,10 @@ defmodule Trivia.Game do
     Logger.info("Resultados guardados para partida #{state.id}")
   end
 
+  # Actualizar puntajes globales de los usuarios
   defp update_global_scores(ranking, topic) do
     Enum.each(ranking, fn player ->
       Trivia.UserManager.update_user_score(player.username, player.score, topic)
     end)
-  end
-
-  def handle_info(:shutdown, state) do
-    Logger.info("Cerrando partida #{state.id}")
-    {:stop, :normal, state}
-  end
-
-  def terminate(reason, state) do
-    Logger.info("Partida #{state.id} terminada: #{inspect(reason)}")
-    :ok
   end
 end

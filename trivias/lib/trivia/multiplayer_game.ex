@@ -10,18 +10,32 @@ defmodule Trivia.MultiplayerGame do
     {:ok, %{rooms: %{}, room_counter: 1}}
   end
 
-  def create_room(creator_session_id, room_name, max_players \\ 4, category \\ nil, num_questions \\ 10) do
-    GenServer.call(__MODULE__, {:create_room, creator_session_id, room_name, max_players, category, num_questions})
+  def create_room(
+        creator_session_id,
+        room_name,
+        max_players \\ 4,
+        category \\ nil,
+        num_questions \\ 10
+      ) do
+    GenServer.call(
+      __MODULE__,
+      {:create_room, creator_session_id, room_name, max_players, category, num_questions}
+    )
   end
 
   def list_public_rooms do
     GenServer.call(__MODULE__, :list_public_rooms)
   end
 
-  def handle_call({:create_room, creator_session_id, room_name, max_players, category, num_questions}, _from, state) do
+  # Callbacks
+  def handle_call(
+        {:create_room, creator_session_id, room_name, max_players, category, num_questions},
+        _from,
+        state
+      ) do
     case Trivia.UserManager.get_user_by_session(creator_session_id) do
       {:ok, creator_user} ->
-        room_id = "ROOM#{state.room_counter}"
+        room_id = "SALA#{state.room_counter}"
 
         room = %{
           id: room_id,
@@ -36,9 +50,10 @@ defmodule Trivia.MultiplayerGame do
 
         new_rooms = Map.put(state.rooms, room_id, room)
 
-        Logger.info("Room created: #{room_id} - #{room_name} by #{creator_user.username}")
+        Logger.info("Sala creada: #{room_id} - #{room_name} por #{creator_user.username}")
 
-        {:reply, {:ok, room_id, room}, %{state | rooms: new_rooms, room_counter: state.room_counter + 1}}
+        {:reply, {:ok, room_id, room},
+         %{state | rooms: new_rooms, room_counter: state.room_counter + 1}}
 
       {:error, reason} ->
         {:reply, {:error, reason}, state}

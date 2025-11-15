@@ -9,11 +9,11 @@ defmodule Trivia.TCPClient do
   def init({host, port}) do
     case :gen_tcp.connect(String.to_charlist(host), port, [:binary, active: false, packet: :line]) do
       {:ok, socket} ->
-        Logger.info("Connected to trivia server at #{host}:#{port}")
+        Logger.info("Conectado a servidor de trivia en #{host}:#{port}")
         {:ok, %{socket: socket, session_id: nil, user: nil}}
 
       {:error, reason} ->
-        Logger.error("Failed to connect: #{inspect(reason)}")
+        Logger.error("Error al conectar: #{inspect(reason)}")
         {:stop, reason}
     end
   end
@@ -51,7 +51,7 @@ defmodule Trivia.TCPClient do
         {:reply, {:error, String.trim(message)}, state}
 
       response ->
-        {:reply, {:error, "Unexpected response: #{response}"}, state}
+        {:reply, {:error, "Respuesta inesperada: #{response}"}, state}
     end
   end
 
@@ -61,17 +61,19 @@ defmodule Trivia.TCPClient do
     case send_and_receive(state.socket, command) do
       "OK " <> response ->
         [session_id | _user_info] = String.split(response, "|")
+
         user = %{
           username: username,
           session_id: String.trim(session_id)
         }
+
         {:reply, {:ok, user}, %{state | session_id: String.trim(session_id), user: user}}
 
       "ERROR" <> message ->
         {:reply, {:error, String.trim(message)}, state}
 
       response ->
-        {:reply, {:error, "Unexpected response: #{response}"}, state}
+        {:reply, {:error, "Respuesta inesperada: #{response}"}, state}
     end
   end
 
@@ -87,10 +89,10 @@ defmodule Trivia.TCPClient do
           {:reply, {:error, String.trim(message)}, state}
 
         response ->
-          {:reply, {:error, "Unexpected response: #{response}"}, state}
+          {:reply, {:error, "Respuesta inesperada: #{response}"}, state}
       end
     else
-      {:reply, {:error, "Not logged in"}, state}
+      {:reply, {:error, "No has iniciado sesión"}, state}
     end
   end
 
@@ -109,10 +111,10 @@ defmodule Trivia.TCPClient do
           {:reply, {:game_over, String.trim(message)}, state}
 
         response ->
-          {:reply, {:error, "Unexpected response: #{response}"}, state}
+          {:reply, {:error, "Respuesta inesperada: #{response}"}, state}
       end
     else
-      {:reply, {:error, "Not logged in"}, state}
+      {:reply, {:error, "No has iniciado sesión"}, state}
     end
   end
 
@@ -125,7 +127,7 @@ defmodule Trivia.TCPClient do
         {:reply, {:ok, leaderboard}, state}
 
       response ->
-        {:reply, {:error, "Unexpected response: #{response}"}, state}
+        {:reply, {:error, "Respuesta inesperada: #{response}"}, state}
     end
   end
 
@@ -147,7 +149,9 @@ defmodule Trivia.TCPClient do
             score: String.to_integer(score),
             games_played: String.to_integer(games_played)
           }
-        _ -> nil
+
+        _ ->
+          nil
       end
     end)
     |> Enum.filter(& &1)
